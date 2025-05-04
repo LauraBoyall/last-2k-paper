@@ -11,6 +11,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(patchwork)
 library(akima) # interpolates the model
+library(geoChronR)
 
 
 ######### SORTING THE CLIMATE MODELS ##############
@@ -156,8 +157,7 @@ mapping <- function(X_annual_z, lon, lat, unique_years, start, end, title = NULL
 ######### MCA #################
 
 
-setwd("~/Documents/Documents – Laura’s MacBook Pro/Hydroclimate/")
-load("iso2k1_0_1.RData")
+load("~/Documents/Documents – Laura’s MacBook Pro/Hydroclimate/iso2k1_0_1.RData")
 # Remove extraneous objects
 rm(D, TS)
 
@@ -296,6 +296,91 @@ MCA_plot <- ggplot() +
 # Define time periods
 mca_start <- 1100; mca_end <- 1250
 lia_start <- 1650; lia_end <- 1850
+
+
+make_combined_plot <- function(model, model_name,
+                               proxy_df, proxy_column = "mca_means",
+                               start_year = 1100, end_year = 1250,
+                               interp_res = 0.5) {
+  
+  # Extract model data
+  model_df <- mapping(model$X_annual_z,
+                      model$lon,
+                      model$lat,
+                      model$unique_years,
+                      start = start_year,
+                      end = end_year,
+                      return_data = TRUE)
+  
+  # Interpolate model to smoother grid
+  interp_result <- with(model_df, akima::interp(x = lon, y = lat, z = value,
+                                                xo = seq(min(lon), max(lon), by = interp_res),
+                                                yo = seq(min(lat), max(lat), by = interp_res),
+                                                linear = TRUE, extrap = FALSE))
+  
+  interp_df <- expand.grid(lon = interp_result$x, lat = interp_result$y)
+  interp_df$value <- as.vector(interp_result$z)
+  interp_df <- interp_df[!is.na(interp_df$value), ]
+  
+  # Prepare proxy values for plotting
+  proxy_df$val <- proxy_df[[proxy_column]]
+  
+  # Plot
+  p <- ggplot() +
+    geom_raster(data = interp_df, aes(x = lon, y = lat, fill = value)) +
+    geom_point(data = proxy_df, aes(x = lon, y = lat, shape = archive), 
+               color = "black", size = 4) +
+    geom_point(data = proxy_df, aes(x = lon, y = lat, shape = archive, color = val), 
+               size = 3) +
+    geom_sf(data = world, fill = NA, color = "black", size = 0.3) +
+    scale_shape_manual(values = shapes) +
+    scale_fill_gradientn(
+      name = "Model Mean (Z-score)",
+      colours = c(
+        "#053061", "#2166ac", "#4393c3", "#92c5de", "#d1e5f0",
+        "#ffffbf", "#fddbc7", "#f4a582", "#d6604d", "#b2182b", "#67001f"
+      ),
+      limits = c(-0.1, 0.1),
+      oob = scales::squish
+    ) +
+    scale_color_gradient2(
+      name = "Proxy Mean (Z-score)",
+      low = "blue", mid = "white", high = "red",
+      limits = c(-1.5, 1.5),
+      breaks = c(-1.5, 0, 1.5),
+      labels = c("-1.5", "0", "1.5")
+    ) +
+    coord_sf(xlim = c(-120, 70), ylim = c(20, 90), expand = FALSE) +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.box = "vertical",
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 16)
+    ) +
+    labs(
+      title = paste0("Model: ", model_name, " (", start_year, "–", end_year, " CE)"),
+      shape = NULL
+    ) +
+    guides(
+      fill = guide_colorbar(title.position = "bottom", title.hjust = 0.5, barwidth = unit(5, "cm")),
+      color = guide_colorbar(title.position = "bottom", title.hjust = 0.5, barwidth = unit(5, "cm")),
+      shape = guide_legend(override.aes = list(size = 4))
+    ) +
+    geom_rect(aes(xmin = -15, xmax = 40, ymin = 47, ymax = 85), 
+              color = "black", fill = NA, lwd = 0.6, linetype = "dashed") +
+    geom_rect(aes(xmin = -15, xmax = 40, ymin = 30, ymax = 47), 
+              color = "black", fill = NA, lwd = 0.6, linetype = "dashed") +
+    geom_rect(aes(xmin = -90, xmax = -15, ymin = 50, ymax = 85), 
+              color = "black", fill = NA, lwd = 0.6, linetype = "dashed")
+  
+  return(p)
+}
+
+
+
+
 
 # MCA plots
 make_combined_plot(icesm, "iCESM", mcaRecs, "mca_means", mca_start, mca_end)
