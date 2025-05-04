@@ -430,7 +430,7 @@ make_combined_plot <- function(model, model_name,
   return(p)
 }
 
-
+ 
 # MCA plots
 make_combined_plot(icesm, "iCESM", mcaRecs, "mca_means", mca_start, mca_end)
 make_combined_plot(giss,  "GISS",  mcaRecs, "mca_means", mca_start, mca_end)
